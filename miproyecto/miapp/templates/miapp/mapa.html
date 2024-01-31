@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Accesibilidad</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.6.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+    <style>
+        #map {
+            height: 400px;
+            width: 100%;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body class="container" style="background-color: #87CEEB; color: white; font-family: 'Arial', sans-serif;">
+
+ <h1 class="mt-4">ALPI</h1><!-- Agrega este código al principio de tu cuerpo HTML -->
+<div class="sidebar" style="background-color: #252440; padding: 10px;">
+    <!-- Agrega aquí tus elementos de filtro -->
+    <h3>CATEGORIAS ACCESIBLES</h3>
+    <!-- Agrega esto a tu plantilla donde deseas mostrar el menú de filtro -->
+<div class="container">
+    <form method="get" action="{% url 'map_view' %}">
+    <label for="category_filter">Selecciona una categoría:</label>
+    <select name="category" id="category_filter">
+        <option value="">Todas las categorías</option>
+        {% for category in categories %}
+            <option value="{{ category.id }}">{{ category.name }}</option>
+        {% endfor %}
+    </select>
+    <button id="filter_button">Filtrar</button>
+</form>
+</div>
+
+
+<div id="map" style="height: 400px; margin-top: 20px;"></div>
+</div>
+
+            </div>
+        </div>
+    </div>
+
+    {% load static %}
+    <script src="https://code.jquery.com/jquery-3.6.0.slim.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.10.2/dist/umd/popper.min.js" integrity="sha384-mQ93GR66B00ZXjt0YO5KlohRA5SYbSY5j17EjUn5oA6Zzj3eJDI2QG5FII6LZfS" crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.6.0/js/bootstrap.min.js" integrity="sha384-7Jq9SA/DFCf6JzB/B6P9t1K7I+hj6an2EKA3QVMuF6N5Iex4W5+Ay4Hhvc+3Qfjj" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    let map = L.map('map').setView([-34.59166, -58.41755], 4);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    // Definir tu icono personalizado
+    var customIcon = L.icon({
+        iconUrl: '{% static "alpi1.png" %}', // Ruta a tu imagen de marcador
+        iconSize: [20, 20],  // Tamaño del icono (ajústalo según tu diseño)
+        iconAnchor: [20, 40],  // Punto de anclaje del icono (ajústalo según tu diseño)
+        popupAnchor: [0, -40]  // Punto de anclaje del popup (ajústalo según tu diseño)
+    });
+
+    // Obtener las ubicaciones y categorías del servidor
+    fetch('{% url "get_locations" %}')
+        .then(response => response.json())
+        .then(data => {
+            console.log('Data received:', data);
+            let locations = data.locations;
+            let categories = JSON.parse(data.categories);
+
+            // Mostrar categorías en el menú desplegable
+            let categoryFilter = document.getElementById('category_filter');
+            categories.forEach(category => {
+                let option = document.createElement('option');
+                option.value = category.pk;
+                option.textContent = category.fields.name;
+                categoryFilter.appendChild(option);
+            });
+        })
+        .catch(error => console.error('Error fetching locations and categories:', error));
+
+     // Obtener el elemento del filtro de categoría
+let categoryFilter = document.getElementById('category_filter');
+    // Escuchar el evento change en el filtro de categoría
+categoryFilter.addEventListener('change', function () {
+
+ filterLocations();
+});
+
+    // Función para filtrar las ubicaciones por categoría
+    function filterLocations() {
+        const categoryId = categoryFilter.value; // Obtener el ID de la categoría seleccionada
+        const categoryName = categoryFilter.options[categoryFilter.selectedIndex].textContent;
+
+        // Realizar una solicitud al servidor para obtener las ubicaciones filtradas por categoría
+        fetch(`get_locations?category=${categoryId}`)
+            .then(response => response.json())
+            .then(data => {
+                // Limpiar marcadores existentes en el mapa
+                map.eachLayer(layer => {
+                    if (layer instanceof L.Marker) {
+                        map.removeLayer(layer);
+                    }
+                });
+
+                // Agregar nuevos marcadores solo para las ubicaciones de la categoría seleccionada
+                data.locations.forEach(location => {
+                    if (location.category === categoryName) { // Verificar si la categoría de la ubicación coincide con la categoría seleccionada
+                        addMarker([location.latitude, location.longitude], location.name, location.description, location.image_url);
+                    }
+                });
+            })
+            .catch(error => console.error('Error fetching locations by category:', error));
+    }
+
+
+
+
+    // Función para agregar marcadores
+    function addMarker(coords, name, description, imageUrl) {
+        let marker = L.marker(coords, { icon: customIcon }).addTo(map);
+
+        // Crear contenido HTML para el popup
+        let popupContent = `<b>${name}</b><br>${description}`;
+
+        // Agregar la imagen al popup si hay una URL de imagen
+        if (imageUrl) {
+            popupContent += `<br><img src="${imageUrl}" alt="${name}" style="max-width: 100%;">`;
+        }
+
+        // Vincular el popup al marcador
+        marker.bindPopup(popupContent);
+    }
+});
+
+</script>
+
+
+</body>
+</html>
+
+
